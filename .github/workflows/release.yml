@@ -6,77 +6,118 @@ on:
     branches:
       - main
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true
-    #nodeのバージョン設定 参考 https://docs.github.com/ja/free-pro-team@latest/actions/guides/building-and-testing-nodejs
-    strategy:
-      matrix:
-        node-version: [14.x]
+permissions:
+  contents: write
+  pull-requests: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  ZIP_NAME: ruijinen-skin-r002-lp-a.zip
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@master
-
-      #scriptの実施
-      - uses: actions/checkout@v3
-      - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/checkout@v7
         with:
-          node-version: '14.x'
-      - name: Install dependencies
-        run: npm ci
-      - name: build css and js
-        run: npm run build
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
-      #composerの実施
+      - name: Get version from plugin root file
+        id: get_version
+        run: |
+          version="$(bash .github/scripts/get-plugin-version.sh)"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      # 同じバージョンのリリース（タグ）が既に存在する場合はリリースをスキップする
+      - name: Check existing release
+        id: check
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          status=0
+          git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" > /dev/null || status=$?
+          case "$status" in
+            0)
+              echo "::notice::バージョン ${VERSION} は既にリリース済みのため、リリース作成をスキップします"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              ;;
+            2)
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::タグの確認に失敗しました (exit ${status})"
+              exit "$status"
+              ;;
+          esac
+
+      # Node.js のバージョンは mise.toml で管理
+      - name: Setup Node.js
+        if: steps.check.outputs.skip == 'false'
+        uses: jdx/mise-action@v5
+
+      - name: Build CSS
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          npm ci
+          npm run build
+
       - name: Composer install
-        uses: docker://composer:1.9.1
-        with:
-          args: install
+        if: steps.check.outputs.skip == 'false'
+        run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
 
-      # release作成
+      # 配布に必要なファイルのみを zip に含める（zip 直下にファイルを配置）
+      - name: Create zip
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          zip -r -q "$ZIP_NAME" \
+            ruijinen-skin-r002-lp.php \
+            readme.txt \
+            README.md \
+            App \
+            dist \
+            languages \
+            vendor \
+            -x '*.DS_Store'
+          unzip -l "$ZIP_NAME" | tail -n 1
+
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: steps.check.outputs.skip == 'false'
+        uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.event.pull_request.title }}
-          release_name: ${{ github.event.pull_request.title }}
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: ${{ steps.get_version.outputs.version }}
           body: ${{ github.event.pull_request.body }}
-          draft: false
-          prerelease: false
+          target_commitish: ${{ github.event.pull_request.merge_commit_sha }}
+          files: ${{ env.ZIP_NAME }}
 
-      # release用のzip作成 https://github.com/marketplace/actions/zip-release
-      - name: Zip Release
-        uses: TheDoctor0/zip-release@0.4.1
-        with:
-          filename: 'ruijinen-skin-r002-lp-a.zip' # ファイル名
-          exclusions: '*.git* /*node_modules/* .editorconfig /*src/*scss/*' # 除外設定
-          directory: '.'
-          path: '.'
-          type: 'zip'
-
-      # releaseにzipファイルを添付
-      - name: Upload Release Asset
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
+  # main の内容を dev へ反映する PR を作成（リリースをスキップした場合も実行）
+  sync-dev:
+    if: github.event.pull_request.merged == true
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create pull request (main → dev)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
-          asset_path: ./ruijinen-skin-r002-lp-a.zip
-          asset_name: ruijinen-skin-r002-lp-a.zip
-          asset_content_type: application/zip
-
-      # mainからdevにPR生成
-      - name: create-pull-request
-        uses: repo-sync/pull-request@v2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          destination_branch: 'dev'
-          pr_title: "リリース残処理：mainの内容をdevへ反映"
-          pr_body: "Pulling main into dev"
-          pr_allow_empty: true
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [[ -n "$(gh pr list --base dev --head main --state open --json number --jq '.[].number')" ]]; then
+            echo "::notice::main → dev の PR が既に存在するため作成をスキップします"
+            exit 0
+          fi
+          if ! output="$(gh pr create --base dev --head main \
+            --title 'リリース残処理：mainの内容をdevへ反映' \
+            --body 'Pulling main into dev' 2>&1)"; then
+            if grep -q 'No commits between' <<< "$output"; then
+              echo "::notice::main と dev に差分がないため PR を作成しません"
+              exit 0
+            fi
+            echo "$output" >&2
+            exit 1
+          fi
+          echo "$output"
