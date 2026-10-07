@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<ruleset name="ruijinen-skin-r002-lp-a">
+	<description>WordPress Coding Standards for this plugin.</description>
+
+	<file>ruijinen-skin-r002-lp.php</file>
+	<file>App</file>
+
+	<arg name="extensions" value="php"/>
+	<arg name="colors"/>
+	<arg value="sp"/>
+
+	<config name="minimum_wp_version" value="6.1"/>
+	<config name="testVersion" value="7.4-"/>
+
+	<rule ref="WordPress">
+		<!-- App/ 配下はクラス名と同名のファイル（PSR-4 形式）で管理しているため除外. -->
+		<exclude name="WordPress.Files.FileName"/>
+	</rule>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="ruijinen-skin-r002-lp-a"/>
+			</property>
+		</properties>
+	</rule>
+</ruleset>
