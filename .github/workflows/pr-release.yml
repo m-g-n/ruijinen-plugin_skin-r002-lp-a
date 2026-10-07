@@ -13,7 +13,7 @@ permissions:
 jobs:
   create-release-pr:
     # main → dev の同期 PR がマージされた場合はリリース PR を作らない
-    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'main') == false
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref != 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
