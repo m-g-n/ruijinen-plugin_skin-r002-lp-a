@@ -18,11 +18,7 @@
     "https://github.com/m-g-n/ruijinen-plugin_block-patterns--r002-lp/releases/latest/download/ruijinen-block-patterns-r002-lp.zip"
   ],
   "port": 1051,
-  "env": {
-    "tests": {
-      "port": 1052
-    }
-  },
+  "testsEnvironment": false,
   "config": {
     "WP_DEBUG": true
   },
