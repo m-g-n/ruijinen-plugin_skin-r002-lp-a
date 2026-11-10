@@ -45,6 +45,10 @@
     "postcss-sorting": "^10.0.0",
     "sass": "^1.105.1"
   },
+  "overrides": {
+    "isomorphic-git": "^1.38.6",
+    "qs": "^6.16.1"
+  },
   "browserslist": [
     ">0.25% in JP",
     "not ie < 11",
