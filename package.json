@@ -34,7 +34,7 @@
   "author": "mgn",
   "license": "GPL-2.0+",
   "devDependencies": {
-    "@wordpress/env": "^11.16.0",
+    "@wordpress/env": "^12.1.0",
     "backstopjs": "^6.3.25",
     "cssnano": "^9.3.2",
     "del-cli": "^7.0.0",
@@ -44,6 +44,16 @@
     "postcss-sort-media-queries": "^6.7.1",
     "postcss-sorting": "^10.0.0",
     "sass": "^1.105.1"
+  },
+  "overrides": {
+    "isomorphic-git": "^1.38.6",
+    "qs": "^6.16.1",
+    "@wordpress/env": {
+      "rimraf": "^6.1.4"
+    },
+    "backstopjs": {
+      "puppeteer": "^25.16.0"
+    }
   },
   "browserslist": [
     ">0.25% in JP",
